@@ -24,23 +24,21 @@ static inline pid_t __gettid(void)
     return -1;
 }
 
-#define metasim_log(...)                                                  \
-        if (metasim_log_error) {                                          \
-            FILE *out = metasim_log_stream ? metasim_log_stream : stderr; \
-            char *file = strrchr(__FILE__, '/');                          \
-            fprintf(out, "tid=%d @ %s()[%s:%d] ",                         \
-                         __gettid(), __func__, &file[1], __LINE__);       \
-            fprintf(out, __VA_ARGS__);                                    \
-            fprintf(out, "\n");                                           \
-            fflush(out);                                                  \
-        }
+#define __metasim_log(mask, ...)                                              \
+        do {                                                                  \
+            if (mask) {                                                       \
+                FILE *out = metasim_log_stream ? metasim_log_stream : stderr; \
+                char *file = strrchr(__FILE__, '/');                          \
+                fprintf(out, "tid=%d @ %s()[%s:%d] ",                         \
+                             __gettid(), __func__, &file[1], __LINE__);       \
+                fprintf(out, __VA_ARGS__);                                    \
+                fprintf(out, "\n");                                           \
+                fflush(out);                                                  \
+            }                                                                 \
+        } while (0)
 
-#define __error metasim_log
-
-#define __debug(...)                                                      \
-        if (metasim_log_debug) {                                          \
-            metasim_log(__VA_ARGS__);                                     \
-        }
+#define __error(...)  __metasim_log(metasim_log_error, __VA_ARGS__)
+#define __debug(...)  __metasim_log(metasim_log_debug, __VA_ARGS__)
 
 int metasim_log_open(const char *path);
 

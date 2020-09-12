@@ -11,8 +11,8 @@
 
 #include "metasim-log.h"
 
-int metasim_log_error;
-int metasim_log_debug;
+int metasim_log_error = 1;
+int metasim_log_debug = 1;
 
 FILE *metasim_log_stream;
 

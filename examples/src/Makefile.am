@@ -1,15 +1,12 @@
-libexec_PROGRAMS = pingpong \
-				   rpingpong
+libexec_PROGRAMS = ping
 
-AM_CFLAGS = -Wall -Werror
+AM_CFLAGS = -Wall $(MPI_CFLAGS)
 
 AM_CPPFLAGS = -I$(top_srcdir)/libmetasim/src
 
-AM_LDFLAGS = -static
+AM_LDFLAGS = -static $(MPI_CLDFLAGS)
 
 LDADD = $(top_builddir)/libmetasim/src/libmetasim.la -lrt -lm
 
-pingpong_SOURCES = pingpong.c
-
-rpingpong_SOURCES = rpingpong.c
+ping_SOURCES = ping.c
 

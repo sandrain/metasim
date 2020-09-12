@@ -1,2 +1,2 @@
-noinst_HEADERS = metasim-rpc.h
+noinst_HEADERS = metasim-common.h
 
