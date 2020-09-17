@@ -1,4 +1,4 @@
-libexec_PROGRAMS = ping
+libexec_PROGRAMS = ping echo
 
 AM_CFLAGS = -Wall $(MPI_CFLAGS)
 
@@ -9,4 +9,6 @@ AM_LDFLAGS = -static $(MPI_CLDFLAGS)
 LDADD = $(top_builddir)/libmetasim/src/libmetasim.la -lrt -lm
 
 ping_SOURCES = ping.c
+
+echo_SOURCES = echo.c
 

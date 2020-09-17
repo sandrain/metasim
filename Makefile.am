@@ -1,4 +1,4 @@
-SUBDIRS = common server libmetasim examples
+SUBDIRS = common server libmetasim examples test
 
 CONFIG = ordered
 

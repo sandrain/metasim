@@ -45,6 +45,7 @@ static void metasim_listener_handle_init(hg_handle_t handle)
             metasim->rank, metasim->nranks);
 
     margo_respond(handle, &out);
+    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_init);
@@ -65,9 +66,31 @@ static void metasim_listener_handle_terminate(hg_handle_t handle)
     __debug("[RPC TERMINATE] respoding rpc (ret=0)");
 
     margo_respond(handle, &out);
+    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_terminate);
+
+static void metasim_listener_handle_echo(hg_handle_t handle)
+{
+    int32_t num;
+    int32_t echo;
+    metasim_echo_in_t in;
+    metasim_echo_out_t out;
+
+    margo_get_input(handle, &in);
+    num = in.num;
+
+    echo = num;
+    out.echo = echo;
+
+    __debug("[RPC ECHO] (num=%d) => (echo=%d)", num, echo);
+
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_echo);
 
 static void metasim_listener_handle_ping(hg_handle_t handle)
 {
@@ -88,6 +111,7 @@ static void metasim_listener_handle_ping(hg_handle_t handle)
     __debug("[RPC PING] respoding rpc (ret=0, pong=%d)", ping);
 
     margo_respond(handle, &out);
+    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_ping);
@@ -109,6 +133,7 @@ static void metasim_listener_handle_sum(hg_handle_t handle)
     __debug("[RPC SUM] respoding rpc (ret=0, sum=%d)", seed);
 
     margo_respond(handle, &out);
+    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_sum);
@@ -124,6 +149,11 @@ static void listener_register_rpc(margo_instance_id mid)
                    metasim_terminate_in_t,
                    metasim_terminate_out_t,
                    metasim_listener_handle_terminate);
+
+    MARGO_REGISTER(mid, "listener_echo",
+                   metasim_echo_in_t,
+                   metasim_echo_out_t,
+                   metasim_listener_handle_echo);
 
     MARGO_REGISTER(mid, "listener_ping",
                    metasim_ping_in_t,

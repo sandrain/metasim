@@ -188,7 +188,9 @@ AC_CONFIG_FILES([Makefile
                  libmetasim/Makefile
                  libmetasim/src/Makefile
                  server/Makefile
-                 server/src/Makefile])
+                 server/src/Makefile
+                 test/Makefile
+                 test/src/Makefile])
 
 METASIM_VERSION=${PACKAGE_VERSION}
 AC_SUBST(METASIM_VERSION)

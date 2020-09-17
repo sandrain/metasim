@@ -28,15 +28,15 @@ int main(int argc, char **argv)
 {
     int ret = 0;
     int i = 0;
-    int ping_count = 0;
+    int count = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (argc == 2) {
-        ping_count = atoi(argv[1]);
-        assert(ping_count > 0);
+        count = atoi(argv[1]);
+        assert(count > 0);
     }
 
     pid = getpid();
@@ -46,30 +46,25 @@ int main(int argc, char **argv)
 
     ret = metasim_invoke_init(metasim, rank, (int32_t) pid,
                               &server_rank, &server_nranks);
-    __debug("[%d] RPC INIT (rank=%d,pid=%d) => "
-            "(server_rank=%d, server_nranks=%d)",
-            rank, rank, pid, server_rank, server_nranks);
-
     if (ret) {
-        __error("[%d] rpc failed, terminating..", rank);
-        fflush(stdout);
+        __error("[%d] RPC INIT failed, terminating..\n", rank);
         goto out;
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (ping_count == 0)
-        ping_count = server_nranks;
+    if (count == 0)
+        count = server_nranks;
 
-    for (i = 0; i < ping_count; i++) {
-        int32_t ping = rank;
-        int32_t pong = 0;
+    for (i = 0; i < count; i++) {
+        int32_t num = i;
+        int32_t echo = 0;
 
-        ret = metasim_invoke_ping(metasim, i, ping, &pong);
+        ret = metasim_invoke_echo(metasim, num, &echo);
 
-        __debug("[%d] (%3d/%3d) RPC PING (target=%d,ping=%d) => "
-                "(ret=%d, pong=%d)",
-                rank, i, ping_count, i, ping, ret, pong);
+        __debug("[%d] (%3d/%3d) RPC ECHO (num=%d,echo=%d)",
+                rank, i, count, num, echo);
+        fflush(stdout);
     }
 
 out:
@@ -79,4 +74,5 @@ out:
 
     return ret;
 }
+
 

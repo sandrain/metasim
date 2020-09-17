@@ -102,6 +102,34 @@ int metasim_invoke_terminate(metasim_t metasim, int32_t rank, int32_t pid)
     return ret;
 }
 
+int metasim_invoke_echo(metasim_t metasim, int32_t num, int32_t *echo)
+{
+    int ret = 0;
+    metasim_ctx_t *self = metasim_ctx(metasim);
+    hg_handle_t handle;
+    hg_id_t rpc_id;
+    metasim_echo_in_t in;
+    metasim_echo_out_t out;
+
+    if (!self)
+        return EINVAL;
+
+    rpc_id = self->rpc.echo;
+    in.num = num;
+
+    margo_create(self->mid, self->listener_addr, rpc_id, &handle);
+    margo_forward(handle, &in);
+
+     margo_get_output(handle, &out);
+
+    *echo = out.echo;
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return ret;
+}
+
 int metasim_invoke_ping(metasim_t metasim,
                         int32_t target, int32_t ping, int32_t *pong)
 {
@@ -178,13 +206,6 @@ static char *get_local_listener_addr(void)
     return addr;
 }
 
-static void cleanup(metasim_ctx_t *self)
-{
-    if (self) {
-        free(self);
-    }
-}
-
 static char *read_addr_proto(char *listener_addr)
 {
     char *proto = strdup(listener_addr);
@@ -211,6 +232,11 @@ static void register_rpc(metasim_ctx_t *self)
         MARGO_REGISTER(mid, "listener_terminate",
                        metasim_terminate_in_t,
                        metasim_terminate_out_t,
+                       NULL);
+    rpc->echo =
+        MARGO_REGISTER(mid, "listener_echo",
+                       metasim_echo_in_t,
+                       metasim_echo_out_t,
                        NULL);
     rpc->ping =
         MARGO_REGISTER(mid, "listener_ping",
@@ -283,7 +309,7 @@ metasim_t metasim_init(void)
     if (self) {
         ret = init_rpc(self);
         if (ret) {
-            cleanup(self);
+            free(self);
             self = NULL;
         }
     }
@@ -296,10 +322,13 @@ void metasim_exit(metasim_t metasim)
     metasim_ctx_t *self = metasim_ctx(metasim);
 
     if (self) {
-        if (self->mid != MARGO_INSTANCE_NULL)
+        if (self->mid != MARGO_INSTANCE_NULL) {
+            margo_addr_free(self->mid, self->listener_addr);
             margo_finalize(self->mid);
+        }
 
-        cleanup(self);
+        free(self);
+        self = NULL;
     }
 }
 

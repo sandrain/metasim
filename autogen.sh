@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo
-echo ... metasim autogen ...
+echo ... autogen ...
 echo
 
 ## Check all dependencies are present
