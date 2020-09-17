@@ -85,7 +85,7 @@ static void metasim_listener_handle_ping(hg_handle_t handle)
     out.ret = 0;
     out.pong = ping;
 
-    __debug("[RPC PING] respoding rpc (ret=0, pond=%d)", ping);
+    __debug("[RPC PING] respoding rpc (ret=0, pong=%d)", ping);
 
     margo_respond(handle, &out);
     margo_destroy(handle);

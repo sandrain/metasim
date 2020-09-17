@@ -25,10 +25,17 @@ static metasim_t metasim;
 int main(int argc, char **argv)
 {
     int ret = 0;
+    int i = 0;
+    int ping_count = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (argc == 2) {
+        ping_count = atoi(argv[1]);
+        assert(ping_count > 0);
+    }
 
     pid = getpid();
 
@@ -37,11 +44,35 @@ int main(int argc, char **argv)
 
     ret = metasim_invoke_init(metasim, rank, (int32_t) pid,
                               &server_rank, &server_nranks);
-    assert(0 == ret);
+    printf("[%d] RPC INIT (rank=%d,pid=%d) => "
+           "(server_rank=%d, server_nranks=%d)\n",
+           rank, rank, pid, server_rank, server_nranks);
+    fflush(stdout);
 
-    printf("[%d] RPC INIT result: server_rank=%d, server_nranks=%d\n",
-           rank, server_rank, server_nranks);
+    if (ret) {
+        printf("[%d] rpc failed, terminating..\n", rank);
+        fflush(stdout);
+        goto out;
+    }
 
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (ping_count == 0)
+        ping_count = server_nranks;
+
+    for (i = 0; i < ping_count; i++) {
+        int32_t ping = rank;
+        int32_t pong = 0;
+
+        ret = metasim_invoke_ping(metasim, i, ping, &pong);
+
+        printf("[%d] (%3d/%3d) RPC PING (target=%d,ping=%d) => "
+               "(ret=%d, pong=%d)\n",
+               rank, i, ping_count, i, ping, ret, pong);
+        fflush(stdout);
+    }
+
+out:
     metasim_exit(metasim);
 
     MPI_Finalize();
