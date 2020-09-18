@@ -64,8 +64,9 @@ int main(int argc, char **argv)
     for (i = 0; i < ping_count; i++) {
         int32_t ping = rank;
         int32_t pong = 0;
+        int32_t target = i % server_nranks;
 
-        ret = metasim_invoke_ping(metasim, i, ping, &pong);
+        ret = metasim_invoke_ping(metasim, target, ping, &pong);
 
         __debug("[%d] (%3d/%3d) RPC PING (target=%d,ping=%d) => "
                 "(ret=%d, pong=%d)",

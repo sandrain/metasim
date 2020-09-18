@@ -159,6 +159,33 @@ int metasim_invoke_ping(metasim_t metasim,
     return ret;
 }
 
+int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum)
+{
+    int ret = 0;
+    metasim_ctx_t *self = metasim_ctx(metasim);
+    hg_handle_t handle;
+    hg_id_t rpc_id;
+    metasim_sum_in_t in;
+    metasim_sum_out_t out;
+
+    if (!self)
+        return EINVAL;
+    
+    rpc_id = self->rpc.sum;
+    in.seed = seed;
+
+    margo_create(self->mid, self->listener_addr, rpc_id, &handle);
+    margo_forward(handle, &in);
+
+    margo_get_output(handle, &out);
+    *sum = out.sum;
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return ret;
+}
+
 static char *get_local_listener_addr(void)
 {
     int ret = 0;

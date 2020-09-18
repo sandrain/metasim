@@ -16,11 +16,39 @@
 #include "metasim-common.h"
 #include "metasim-server.h"
 #include "metasim-listener.h"
+#include "metasim-rpc.h"
 
 static margo_instance_id listener_mid;
 static const int listener_default_pool_size = 4;
 
 static hg_addr_t listener_addr;
+
+static void print_pool_size(void)
+{
+    int ret = 0;
+    size_t size = 0;
+    size_t total_size = 0;
+    ABT_pool pool = NULL;
+
+    ret = margo_get_handler_pool(listener_mid, &pool);
+    if (ret < 0) {
+        __error("failed to get handler pool");
+        return;
+    }
+
+    ret = ABT_pool_get_size(pool, &size);
+    if (ret != ABT_SUCCESS) {
+        __error("failed to get pool size");
+        return;
+    }
+    ret = ABT_pool_get_total_size(pool, &total_size);
+    if (ret != ABT_SUCCESS) {
+        __error("failed to get pool total size");
+        return;
+    }
+
+    __debug("handler pool size = %zu/%zu", size, total_size);
+}
 
 /*
  * listener rpc handlers
@@ -32,6 +60,8 @@ static void metasim_listener_handle_init(hg_handle_t handle)
 {
     metasim_init_in_t in;
     metasim_init_out_t out;
+
+    print_pool_size();
 
     margo_get_input(handle, &in);
 
@@ -78,6 +108,8 @@ static void metasim_listener_handle_echo(hg_handle_t handle)
     metasim_echo_in_t in;
     metasim_echo_out_t out;
 
+    print_pool_size();
+
     margo_get_input(handle, &in);
     num = in.num;
 
@@ -94,21 +126,35 @@ DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_echo);
 
 static void metasim_listener_handle_ping(hg_handle_t handle)
 {
-    int target;
-    int ping;
+    int ret = 0;
+    int32_t target;
+    int32_t ping;
+    int32_t pong;
     metasim_ping_in_t in;
     metasim_ping_out_t out;
+
+    print_pool_size();
 
     margo_get_input(handle, &in);
     target = in.target;
     ping = in.ping;
 
-    __debug("[RPC PING] received rpc (target=%d, ping=%d)", target, ping);
+    if (target >= metasim->nranks)
+        target = target % metasim->nranks;
 
-    out.ret = 0;
-    out.pong = ping;
+    __debug("[RPC PING] received & forwarding rpc (target=%d, ping=%d)",
+            target, ping);
 
-    __debug("[RPC PING] respoding rpc (ret=0, pong=%d)", ping);
+    ret = metasim_rpc_invoke_ping(target, ping, &pong);
+    if (ret) {
+        __error("metasim_rpc_invoke_ping failed, will return -1 (ret=%d)",
+                ret);
+        pong = -1;
+    }
+
+    out.pong = pong;
+
+    __debug("[RPC PING] respoding rpc (ret=0, pong=%d)", pong);
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);

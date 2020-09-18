@@ -233,9 +233,35 @@ out:
     return ret;
 }
 
+static struct option l_opts[] = {
+    { "help", 0, 0, 'h' },
+    { "test", 0, 0, 't' },
+    { 0, 0, 0, 0 },
+};
+
+static char *s_opts = "ht";
+
+static const char *usage_str =
+"\n"
+"Usage: metasimd [options...]\n"
+"\n"
+"Availble options:\n"
+"-h, --help  print this help message\n"
+"-t, --test  perform self test on server start up\n"
+"\n";
+
+static void print_usage(int ec)
+{
+    fputs(usage_str, stderr);
+    exit(ec);
+}
+
 int main(int argc, char **argv)
 {
     int ret = 0;
+    int ch = 0;
+    int ix = 0;
+    int selftest = 0;
     char *pos = NULL;
     char logfile[PATH_MAX];
     char loglink[PATH_MAX];
@@ -243,6 +269,19 @@ int main(int argc, char **argv)
     MPI_Init(&argc, &argv);
 
     __debug("using mpi to bootstrap servers");
+
+    while ((ch = getopt_long(argc, argv, s_opts, l_opts, &ix)) >= 0) {
+        switch (ch) {
+        case 't':
+            selftest = 1;
+            break;
+
+        case 'h':
+        default:
+            print_usage(0);
+            break;
+        }
+    }
 
     /* open the log file */
     system("mkdir -p logs/margo");
@@ -286,28 +325,32 @@ int main(int argc, char **argv)
     /* wait until all are initialized */
     __fence("all peers are initialized");
 
-    /* test ping from a single server */
-    test_ping(0);
-    __fence("ping test completed from rank 0");
+    if (selftest) {
+        /* test ping from a single server */
+        __debug("## test[0]: ping from 0");
+        test_ping(0);
+        __fence("## ping test completed from rank 0");
 
-#if 0
-    /* test ping from all servers */
-    test_ping(-1);
-    __fence("ping test completed from all servers");
+        /* test ping from all servers */
+        __debug("## test[1]: ping from all ranks");
+        test_ping(-1);
+        __fence("## ping test completed from all ranks");
 
-    /* test broadcasting (sum) from a single server */
-    test_sum(0);
-    __fence("bcast sum test completed from rank 0");
+        /* test broadcasting (sum) from a single server */
+        __debug("## test[2]: broadcast sum from rank 0");
+        test_sum(0);
+        __fence("## broadcast sum test completed from rank 0");
 
-    /* test broadcasting (sum) from all servers */
-    test_sum(-1);
-    __fence("bcast sum test completed from all servers");
-#endif
+        /* test broadcasting (sum) from all servers */
+        __debug("## test[3]: broadcast sum from all ranks");
+        test_sum(-1);
+        __fence("## broadcast sum test completed from all ranks");
+    }
 
+    /* init listener to accept requests from local clients */
     metasim_listener_init();
 
     margo_diag_dump(metasim->mid, "logs/margo/diag", 1);
-
     margo_wait_for_finalize(metasim->mid);
 out:
     cleanup();
