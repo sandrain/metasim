@@ -11,7 +11,6 @@
 #include <errno.h>
 #include <assert.h>
 #include <margo.h>
-#include <abt.h>
 
 #include "metasim-common.h"
 #include "metasim-server.h"
@@ -22,33 +21,6 @@ static margo_instance_id listener_mid;
 static const int listener_default_pool_size = 4;
 
 static hg_addr_t listener_addr;
-
-static void print_pool_size(void)
-{
-    int ret = 0;
-    size_t size = 0;
-    size_t total_size = 0;
-    ABT_pool pool = NULL;
-
-    ret = margo_get_handler_pool(listener_mid, &pool);
-    if (ret < 0) {
-        __error("failed to get handler pool");
-        return;
-    }
-
-    ret = ABT_pool_get_size(pool, &size);
-    if (ret != ABT_SUCCESS) {
-        __error("failed to get pool size");
-        return;
-    }
-    ret = ABT_pool_get_total_size(pool, &total_size);
-    if (ret != ABT_SUCCESS) {
-        __error("failed to get pool total size");
-        return;
-    }
-
-    __debug("handler pool size = %zu/%zu", size, total_size);
-}
 
 /*
  * listener rpc handlers
@@ -61,7 +33,7 @@ static void metasim_listener_handle_init(hg_handle_t handle)
     metasim_init_in_t in;
     metasim_init_out_t out;
 
-    print_pool_size();
+    print_margo_handler_pool_size(listener_mid);
 
     margo_get_input(handle, &in);
 
@@ -108,7 +80,7 @@ static void metasim_listener_handle_echo(hg_handle_t handle)
     metasim_echo_in_t in;
     metasim_echo_out_t out;
 
-    print_pool_size();
+    print_margo_handler_pool_size(listener_mid);
 
     margo_get_input(handle, &in);
     num = in.num;
@@ -133,7 +105,7 @@ static void metasim_listener_handle_ping(hg_handle_t handle)
     metasim_ping_in_t in;
     metasim_ping_out_t out;
 
-    print_pool_size();
+    print_margo_handler_pool_size(listener_mid);
 
     margo_get_input(handle, &in);
     target = in.target;
@@ -169,6 +141,8 @@ static void metasim_listener_handle_sum(hg_handle_t handle)
     int32_t sum = 0;
     metasim_sum_in_t in;
     metasim_sum_out_t out;
+
+    print_margo_handler_pool_size(listener_mid);
 
     margo_get_input(handle, &in);
     seed = in.seed;
@@ -223,8 +197,8 @@ static void listener_register_rpc(margo_instance_id mid)
 int metasim_listener_init(void)
 {
     int ret = 0;
-    char addrstr[128];
-    size_t addrstr_len = 128;
+    char addrstr[512];
+    size_t addrstr_len = 512;
     FILE *fp = NULL;
     margo_instance_id mid;
     hg_addr_t addr;

@@ -114,7 +114,8 @@ static int comm_init(void)
     __debug("ssg group (gid=%lu, rank=%d, nranks=%d)",
             (unsigned long) gid, (int) rank, nranks);
 
-    ssg_group_dump(gid);
+    if (rank == 0)
+        ssg_group_dump(gid);
 
     peer_addrs = calloc(nranks, sizeof(*peer_addrs));
     if (!peer_addrs) {
@@ -163,8 +164,8 @@ static int comm_probe_peers(void)
 {
     int ret = 0;
     int i = 0;
-    char str[256];
-    size_t len = 256; 
+    char str[512];
+    size_t len = 512; 
 
     __debug("probing peer addresses");
 

@@ -251,6 +251,7 @@ static void metasim_rpc_handle_sum(hg_handle_t handle)
     metasim_sum_out_t out;
 
     __debug("sum rpc handler");
+    print_margo_handler_pool_info(metasim->mid);
 
     hret = margo_get_input(handle, &in);
     if (hret != HG_SUCCESS) {
