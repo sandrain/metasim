@@ -154,7 +154,7 @@ static void metasim_listener_handle_ping(hg_handle_t handle)
 
     out.pong = pong;
 
-    __debug("[RPC PING] respoding rpc (ret=0, pong=%d)", pong);
+    __debug("[RPC PING] respoding rpc (pong=%d)", pong);
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
@@ -164,19 +164,27 @@ DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_ping);
 
 static void metasim_listener_handle_sum(hg_handle_t handle)
 {
-    int seed;
+    int ret = 0;
+    int32_t seed = 0;
+    int32_t sum = 0;
     metasim_sum_in_t in;
     metasim_sum_out_t out;
 
     margo_get_input(handle, &in);
     seed = in.seed;
 
-    __debug("[RPC SUM] received rpc (seed=%d)", seed);
+    __debug("[RPC SUM] received & forwarding rpc (seed=%d)", seed);
 
-    out.ret = 0;
-    out.sum = seed;
+    ret = metasim_rpc_invoke_sum(seed, &sum);
+    if (ret) {
+        __error("metasim_rpc_invoke_ping failed, will return -1 (ret=%d)",
+                ret);
+        sum = -1;
+    }
 
-    __debug("[RPC SUM] respoding rpc (ret=0, sum=%d)", seed);
+    __debug("[RPC SUM] respoding rpc (sum=%d)", sum);
+
+    out.sum = sum;
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);

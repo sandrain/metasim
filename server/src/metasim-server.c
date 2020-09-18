@@ -326,22 +326,18 @@ int main(int argc, char **argv)
     __fence("all peers are initialized");
 
     if (selftest) {
-        /* test ping from a single server */
         __debug("## test[0]: ping from 0");
         test_ping(0);
         __fence("## ping test completed from rank 0");
 
-        /* test ping from all servers */
         __debug("## test[1]: ping from all ranks");
         test_ping(-1);
         __fence("## ping test completed from all ranks");
 
-        /* test broadcasting (sum) from a single server */
         __debug("## test[2]: broadcast sum from rank 0");
         test_sum(0);
         __fence("## broadcast sum test completed from rank 0");
 
-        /* test broadcasting (sum) from all servers */
         __debug("## test[3]: broadcast sum from all ranks");
         test_sum(-1);
         __fence("## broadcast sum test completed from all ranks");

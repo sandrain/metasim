@@ -169,21 +169,24 @@ static int sum_forward(metasim_rpc_tree_t *tree,
 {
     int ret = 0;
     int i;
+    int32_t seed = 0;
     int32_t partial_sum = 0;
+    int32_t sum = 0;
     int child_count = tree->child_count;
     int *child_ranks = tree->child_ranks;
     corpc_req_t *req = NULL;
 
+    seed = in->seed;
+
     if (child_count == 0) {
-        out->sum = metasim->rank;
-        __debug("i have no child (sum=%d)", metasim->rank);
-        return 0;
+        __debug("i have no child (sum=%d)", sum);
+        goto out;
     }
 
     __debug("bcasting sum to %d children:", child_count);
 
     for (i = 0; i < child_count; i++)
-        __debug("child[%d] = %d", i, child_ranks[i]);
+        __debug("child[%d] = rank %d", i, child_ranks[i]);
 
     /* forward requests to children in the rpc tree */
     req = calloc(child_count, sizeof(*req));
@@ -222,18 +225,20 @@ static int sum_forward(metasim_rpc_tree_t *tree,
 
         /* TODO: check returns */
         margo_get_output(r->handle, &_out);
-        partial_sum += _out.sum;
+        partial_sum = _out.sum;
+        sum += partial_sum;
 
         __debug("sum from child[%d] (rank=%d): %d (sum=%d)",
-                i, child_ranks[i], _out.sum, partial_sum);
+                i, child_ranks[i], partial_sum, sum);
 
         margo_free_output(r->handle, &_out);
         margo_destroy(r->handle);
     }
 
-    out->sum = partial_sum + metasim->rank;
-
 out:
+    sum += metasim->rank + seed;
+    out->sum = sum;
+
     return ret;
 }
 
@@ -285,7 +290,7 @@ int metasim_rpc_invoke_sum(int32_t seed, int32_t *sum)
     }
 
     in.root = metasim->rank;
-    in.seed = 0;
+    in.seed = seed;
 
     ret = sum_forward(&tree, &in, &out);
     if (ret) {

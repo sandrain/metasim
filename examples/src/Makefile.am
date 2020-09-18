@@ -1,4 +1,4 @@
-libexec_PROGRAMS = ping echo
+libexec_PROGRAMS = ping echo sum
 
 AM_CFLAGS = -Wall $(MPI_CFLAGS)
 
@@ -11,4 +11,6 @@ LDADD = $(top_builddir)/libmetasim/src/libmetasim.la -lrt -lm
 ping_SOURCES = ping.c
 
 echo_SOURCES = echo.c
+
+sum_SOURCES = sum.c
 

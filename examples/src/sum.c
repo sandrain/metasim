@@ -27,17 +27,27 @@ static metasim_t metasim;
 int main(int argc, char **argv)
 {
     int ret = 0;
-    int i = 0;
-    int ping_count = 0;
+    int sum_rank = -1;
+    int32_t seed = -1;
+    int32_t sum = 0;
+    int32_t expected = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (argc == 2) {
-        ping_count = atoi(argv[1]);
-        assert(ping_count > 0);
+        sum_rank = atoi(argv[1]);
+        if (sum_rank >= nranks) {
+            __debug("%d is not a valid rank, rank 0 will be used", sum_rank);
+            sum_rank = 0;
+        }
     }
+
+    if (sum_rank >= 0)
+        __debug("sum will be invoked from rank %d", sum_rank);
+    else
+        __debug("sum will be invoked from all %d ranks", nranks);
 
     pid = getpid();
 
@@ -56,22 +66,19 @@ int main(int argc, char **argv)
         goto out;
     }
 
+    seed = rank;
+    expected = (server_nranks * (server_nranks - 1)) / 2;
+    expected += server_nranks * seed;
+
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (ping_count == 0)
-        ping_count = server_nranks;
-
-    for (i = 0; i < ping_count; i++) {
-        int32_t ping = i;
-        int32_t pong = 0;
-        int32_t target = i % server_nranks;
-
-        ret = metasim_invoke_ping(metasim, target, ping, &pong);
-
-        __debug("[%d] (%3d/%3d) RPC PING (target=%d,ping=%d) => "
-                "(ret=%d, pong=%d)",
-                rank, i, ping_count, i, ping, ret, pong);
+    if (sum_rank < 0 || sum_rank == rank) {
+        ret = metasim_invoke_sum(metasim, seed, &sum);
+        __debug("[%d] RPC SUM (seed=%d) => (ret=%d,sum=%d), expected sum=%d",
+                rank, seed, ret, sum, expected);
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
 out:
     metasim_exit(metasim);
