@@ -24,8 +24,6 @@
 
 #include <mpi.h>
 #include <margo.h>
-#include <ssg.h>
-#include <ssg-mpi.h>
 
 #include "metasim-server.h"
 #include "metasim-rpc.h"
@@ -33,31 +31,6 @@
 
 metasim_server_t _metasim;
 metasim_server_t *metasim = &_metasim;
-
-static ssg_group_config_t ssg_config = {
-    .swim_period_length_ms = 3000,
-    .swim_suspect_timeout_periods = 5,
-    .swim_subgroup_member_count = -1,
-    .ssg_credential = -1,
-};
-
-static void ssg_group_update_cb(void *unused, ssg_member_id_t id,
-                                ssg_member_update_type_t type)
-{
-    switch (type) {
-    case SSG_MEMBER_JOINED:
-        __debug("member %ld joined", id);
-        break;
-
-    case SSG_MEMBER_LEFT:
-        __debug("member %ld left", id);
-        break;
-
-    case SSG_MEMBER_DIED:
-        __debug("member %ld died", id);
-        break;
-    }
-}
 
 static void __fence(const char *format, ...)
 {
@@ -71,18 +44,79 @@ static void __fence(const char *format, ...)
 }
 
 static char hostname[NAME_MAX];
+static const char *server_addr_dir = "logs/addr";
 
-static int comm_init(void)
+static int write_addr_file(int rank, const char *str)
+{
+    int ret = 0;
+    char path[PATH_MAX];
+    FILE *fp = NULL;
+
+    sprintf(path, "%s/%d", server_addr_dir, rank);
+
+    fp = fopen(path, "w");
+    if (fp) {
+        fprintf(fp, "%s\n", str);
+        fclose(fp);
+    } else {
+        __error("failed to write address file %s (%s)",
+                path, strerror(errno));
+        return errno;
+    }
+
+    return ret;
+}
+
+static int read_addr_file(margo_instance_id mid, int nranks, hg_addr_t *addrs)
 {
     int ret = 0;
     int i = 0;
+    FILE *fp = NULL;
+    char path[PATH_MAX];
+    char addrstr[512];
+    hg_addr_t addr;
+    hg_return_t hret;
+
+    for (i = 0; i < nranks; i++) {
+        sprintf(path, "%s/%d", server_addr_dir, i);
+        fp = fopen(path, "r");
+        if (fp) {
+            fgets(addrstr, 511, fp);
+            addrstr[strlen(addrstr) - 1] = '\0';
+
+            __debug("reading address of rank[%d] = %s", i, addrstr);
+
+            hret = margo_addr_lookup(mid, addrstr, &addr);
+            assert(hret == HG_SUCCESS);
+            fclose(fp);
+
+            addrs[i] = addr;
+        } else {
+            __error("failed to read address file %s (err=%s)",
+                    path, strerror(errno));
+            return errno;
+        }
+    }
+
+    return ret;
+}
+
+static int comm_init(int mpi_rank, int mpi_nranks)
+{
+    int ret = 0;
     int rank = 0;
     int nranks = 0;
     margo_instance_id mid;
-    ssg_group_id_t gid;
+    char addrstr[512];
+    size_t addrstr_len = 512;
+    hg_addr_t addr_self;
     hg_addr_t *peer_addrs;
 
     __debug("initializa the communication");
+
+    /* just take the mpi comm world */
+    rank = mpi_rank;
+    nranks = mpi_nranks;
 
     mid = margo_init("ofi+tcp://", MARGO_SERVER_MODE, 1, 4);
     if (mid == MARGO_INSTANCE_NULL) {
@@ -90,49 +124,26 @@ static int comm_init(void)
         return EIO;
     }
 
-    __debug("margo initialized");
+    margo_addr_self(mid, &addr_self);
+    margo_addr_to_string(mid, addrstr, &addrstr_len, addr_self);
 
-    ret = ssg_init();
-    if (ret != SSG_SUCCESS) {
-        __error("ssg_init() failed");
-        return ret;
-    }
+    __debug("margo initialized: %s", addrstr);
 
-    __fence("creating the ssg group");
-
-    gid = ssg_group_create_mpi(mid, "metasim", MPI_COMM_WORLD,
-                               &ssg_config, ssg_group_update_cb, NULL);
-
-    if (gid == SSG_GROUP_ID_INVALID) {
-        __error("ssg_group_create_mpi() failed");
-        return ret;
-    }
-
-    rank = ssg_get_group_self_rank(gid);
-    nranks = ssg_get_group_size(gid);
-
-    __debug("ssg group (gid=%lu, rank=%d, nranks=%d)",
-            (unsigned long) gid, (int) rank, nranks);
-
-    if (rank == 0)
-        ssg_group_dump(gid);
+    ret = write_addr_file(rank, addrstr);
+    assert(0 == ret);
 
     peer_addrs = calloc(nranks, sizeof(*peer_addrs));
-    if (!peer_addrs) {
-        __error("failed to allocate memory");
-        return ENOMEM;
-    }
+    assert(peer_addrs);
 
-    for (i = 0; i < nranks; i++) {
-        ssg_member_id_t memid = ssg_get_group_member_id_from_rank(gid, i);
-        peer_addrs[i] = ssg_get_group_member_addr(gid, memid);
-    }
+    __fence("reading peer addresses");
+
+    ret = read_addr_file(mid, nranks, peer_addrs);
+    assert(0 == ret);
 
     /* initialize the global context */
     metasim->rank = rank;
     metasim->nranks = nranks;
     metasim->mid = mid;
-    metasim->gid = gid;
     metasim->peer_addrs = peer_addrs;
 
     return 0;
@@ -148,13 +159,8 @@ static void cleanup(void)
                 margo_addr_free(metasim->mid, metasim->peer_addrs[i]);
         }
 
-        if (metasim->gid)
-            ssg_group_leave(metasim->gid);
-
         if (metasim->mid)
             margo_finalize(metasim->mid);
-
-        ssg_finalize();
     }
 
     metasim_log_close();
@@ -262,12 +268,16 @@ int main(int argc, char **argv)
     int ret = 0;
     int ch = 0;
     int ix = 0;
+    int mpi_rank = 0;
+    int mpi_nranks = 0;
     int selftest = 0;
     char *pos = NULL;
     char logfile[PATH_MAX];
     char loglink[PATH_MAX];
 
     MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_nranks);
 
     __debug("using mpi to bootstrap servers");
 
@@ -287,6 +297,7 @@ int main(int argc, char **argv)
     /* open the log file */
     system("mkdir -p logs/margo");
     system("mkdir -p logs/hosts");
+    system("mkdir -p logs/addr");
     gethostname(hostname, NAME_MAX);
 
     sprintf(logfile, "logs/hosts/metasimd.%s", hostname);
@@ -297,7 +308,7 @@ int main(int argc, char **argv)
     }
 
     /* initialize communication */
-    ret = comm_init();
+    ret = comm_init(mpi_rank, mpi_nranks);
     if (ret) {
         __error("failed to initialize the communication with peers");
         goto out;

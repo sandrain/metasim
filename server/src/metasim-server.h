@@ -2,7 +2,6 @@
 #define __METASIM_SERVER_H
 
 #include <margo.h>
-#include <ssg.h>
 #include <mpi.h>
 #include <abt.h>
 
@@ -15,7 +14,6 @@ struct metasim_server {
     hg_addr_t *peer_addrs;
 
     margo_instance_id mid;
-    ssg_group_id_t gid;
 };
 
 typedef struct metasim_server metasim_server_t;

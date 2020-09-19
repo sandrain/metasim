@@ -111,8 +111,6 @@ AS_IF([test "$have_C_mpi" != "yes"],
 
 UNIFYFS_AC_MARGO
 
-UNIFYFS_AC_SSG
-
 # checks to see how we can print 64 bit values on this architecture
 gt_INTTYPES_PRI
 
