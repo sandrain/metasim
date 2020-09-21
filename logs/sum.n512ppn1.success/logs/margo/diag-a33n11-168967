@@ -1,0 +1,12 @@
+# Margo diagnostics
+# Sat Sep 19 09:23:32 2020
+
+# <stat>	<avg>	<min>	<max>	<count>
+# Time consumed by HG_Trigger()
+trigger_elapsed	0.000010801	0.000000000	0.000329494	221
+# Time consumed by HG_Progress() when called with timeout==0
+progress_elapsed_zero_timeout	0.000000000	0.000000000	0.000000000	0
+# Time consumed by HG_Progress() when called with timeout!=0
+progress_elapsed_nonzero_timeout	0.036972944	0.000000000	0.100114584	47
+# Timeout values passed to HG_Progress()
+progress_timeout_value	100.000000000	0.000000000	100.000000000	47
