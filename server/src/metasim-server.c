@@ -332,7 +332,7 @@ int main(int argc, char **argv)
 
     /* register rpcs */
     metasim_rpc_register();
-    margo_diag_start(metasim->mid);
+    //margo_diag_start(metasim->mid);
 
     /* wait until all are initialized */
     __fence("all peers are initialized");
@@ -358,7 +358,7 @@ int main(int argc, char **argv)
     /* init listener to accept requests from local clients */
     metasim_listener_init();
 
-    margo_diag_dump(metasim->mid, "logs/margo/diag", 1);
+    //margo_diag_dump(metasim->mid, "logs/margo/diag", 1);
     margo_wait_for_finalize(metasim->mid);
 out:
     cleanup();
