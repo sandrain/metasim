@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 
@@ -27,9 +29,14 @@ static inline pid_t __gettid(void)
 #define __metasim_log(mask, ...)                                              \
         do {                                                                  \
             if (mask) {                                                       \
+                time_t now = time(NULL);                                      \
+                struct tm *ltime = localtime(&now);                           \
+                char timestampstr[128];                                       \
+                strftime(timestampstr, sizeof(timestampstr),                  \
+                         "%Y-%m-%dT%H:%M:%S", ltime);                         \
                 FILE *out = metasim_log_stream ? metasim_log_stream : stderr; \
                 char *file = strrchr(__FILE__, '/');                          \
-                fprintf(out, "tid=%d @ %s()[%s:%d] ",                         \
+                fprintf(out, "%s tid=%d @ %s()[%s:%d] ", timestampstr,        \
                              __gettid(), __func__, &file[1], __LINE__);       \
                 fprintf(out, __VA_ARGS__);                                    \
                 fprintf(out, "\n");                                           \
