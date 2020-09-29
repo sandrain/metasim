@@ -20,6 +20,7 @@ int metasim_invoke_echo(metasim_t metasim, int32_t num, int32_t *echo);
 int metasim_invoke_ping(metasim_t metasim, 
                         int32_t target, int32_t ping, int32_t *pong);
 
-int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum);
+int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum,
+                       uint64_t *elapsed_usec);
 
 #endif /* __METASIM_H */

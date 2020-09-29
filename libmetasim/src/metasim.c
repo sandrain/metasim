@@ -159,7 +159,8 @@ int metasim_invoke_ping(metasim_t metasim,
     return ret;
 }
 
-int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum)
+int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum,
+                       uint64_t *elapsed_usec)
 {
     int ret = 0;
     metasim_ctx_t *self = metasim_ctx(metasim);
@@ -178,7 +179,9 @@ int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum)
     margo_forward(handle, &in);
 
     margo_get_output(handle, &out);
+    ret = out.ret;
     *sum = out.sum;
+    *elapsed_usec = out.elapsed_usec;
 
     margo_free_output(handle, &out);
     margo_destroy(handle);

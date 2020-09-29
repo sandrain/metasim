@@ -9,7 +9,6 @@
 #include <string.h>
 #include <assert.h>
 #include <getopt.h>
-#include <time.h>
 #include <mpi.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -29,28 +28,16 @@ static int server_nranks;
 
 static metasim_t metasim;
 
-static double get_elapsed_time(struct timespec *t1, struct timespec *t2)
-{
-    double elapsed = .0f;
-
-    elapsed = (1e9*(t2->tv_sec - t1->tv_sec) + (t2->tv_nsec - t1->tv_nsec))/1e9;
-
-    return elapsed;
-}
-
 static double do_sum(int32_t seed, int32_t expected)
 {
     int ret = 0;
     int32_t sum = 0;
-    struct timespec start, stop;
-    double elapsed = .0F;
+    uint64_t usec = 0;
+    double elapsed = .0f;
 
-    clock_gettime(CLOCK_REALTIME, &start);
+    ret = metasim_invoke_sum(metasim, seed, &sum, &usec);
 
-    ret = metasim_invoke_sum(metasim, seed, &sum);
-
-    clock_gettime(CLOCK_REALTIME, &stop);
-    elapsed = get_elapsed_time(&start, &stop);
+    elapsed = usec*1e-6;
 
     __debug("[%d] RPC SUM (seed=%d) => (ret=%d, sum=%d), expected sum=%d (%s),"
             " %.6f seconds",

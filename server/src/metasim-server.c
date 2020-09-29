@@ -32,6 +32,11 @@
 metasim_server_t _metasim;
 metasim_server_t *metasim = &_metasim;
 
+static int metasim_proto;
+static char *metasim_proto_prefix[] = {
+    "ofi+tcp://", "ofi+verbs", 0
+};
+
 static void __fence(const char *format, ...)
 {
     va_list args;
@@ -111,14 +116,15 @@ static int comm_init(int mpi_rank, int mpi_nranks)
     size_t addrstr_len = 512;
     hg_addr_t addr_self;
     hg_addr_t *peer_addrs;
+    const char *protostr = metasim_proto_prefix[metasim_proto];
 
-    __debug("initializa the communication");
+    __debug("initializa the communication (protocol: %s)", protostr);
 
     /* just take the mpi comm world */
     rank = mpi_rank;
     nranks = mpi_nranks;
 
-    mid = margo_init("ofi+tcp://", MARGO_SERVER_MODE, 1, 4);
+    mid = margo_init(protostr, MARGO_SERVER_MODE, 1, 4);
     if (mid == MARGO_INSTANCE_NULL) {
         __error("failed to initialize margo");
         return EIO;
@@ -242,21 +248,23 @@ out:
 
 static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
+    { "verbs", 0, 0, 'i' },
     { "silent", 0, 0, 's' },
     { "test", 0, 0, 't' },
     { 0, 0, 0, 0 },
 };
 
-static char *s_opts = "hst";
+static char *s_opts = "hist";
 
 static const char *usage_str =
 "\n"
 "Usage: metasimd [options...]\n"
 "\n"
 "Availble options:\n"
-"-h, --help     print this help message\n"
-"-s, --silent   do not print any logs\n"
-"-t, --test     perform self test on server start up\n"
+"-h, --help        print this help message\n"
+"-i, --verbs       use ibverbs transport (default: tcp)\n"
+"-s, --silent      do not print any logs\n"
+"-t, --test        perform self test on server start up\n"
 "\n";
 
 static void print_usage(int ec)
@@ -286,6 +294,10 @@ int main(int argc, char **argv)
 
     while ((ch = getopt_long(argc, argv, s_opts, l_opts, &ix)) >= 0) {
         switch (ch) {
+        case 'i':
+            metasim_proto = 1;
+            break;
+
         case 's':
             silent = 1;
             break;

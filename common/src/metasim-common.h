@@ -47,7 +47,8 @@ MERCURY_GEN_PROC(metasim_sum_in_t,
                  ((int32_t)(seed)));
 MERCURY_GEN_PROC(metasim_sum_out_t,
                  ((int32_t)(ret))
-                 ((int32_t)(sum)));
+                 ((int32_t)(sum))
+                 ((uint64_t)(elapsed_usec)));
 
 #endif /* __METASIM_COMMON_H */
 

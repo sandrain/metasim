@@ -9,6 +9,7 @@
 #include <config.h>
 
 #include <errno.h>
+#include <time.h>
 #include <assert.h>
 #include <margo.h>
 
@@ -134,6 +135,16 @@ static void metasim_listener_handle_ping(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_ping);
 
+static uint64_t
+calculate_elapsed_usec(struct timespec *t1, struct timespec *t2)
+{
+    double ns = .0f;
+
+    ns = (t2->tv_sec*1e9 + t2->tv_nsec) - (t1->tv_sec*1e9 + t1->tv_nsec);
+
+    return (uint64_t) ns*1e-3;
+}
+
 static void metasim_listener_handle_sum(hg_handle_t handle)
 {
     int ret = 0;
@@ -141,6 +152,8 @@ static void metasim_listener_handle_sum(hg_handle_t handle)
     int32_t sum = 0;
     metasim_sum_in_t in;
     metasim_sum_out_t out;
+    struct timespec start, stop;
+    uint64_t usec = 0;
 
     print_margo_handler_pool_size(listener_mid);
 
@@ -149,16 +162,26 @@ static void metasim_listener_handle_sum(hg_handle_t handle)
 
     __debug("[RPC SUM] received & forwarding rpc (seed=%d)", seed);
 
+    clock_gettime(CLOCK_REALTIME, &start);
+
     ret = metasim_rpc_invoke_sum(seed, &sum);
+
+    clock_gettime(CLOCK_REALTIME, &stop);
+
     if (ret) {
         __error("metasim_rpc_invoke_ping failed, will return -1 (ret=%d)",
                 ret);
         sum = -1;
     }
 
-    __debug("[RPC SUM] respoding rpc (sum=%d)", sum);
+    usec = calculate_elapsed_usec(&start, &stop);
 
+    __debug("[RPC SUM] respoding rpc (sum=%d, usec=%llu)",
+            sum, (unsigned long long) usec);
+
+    out.ret = ret;
     out.sum = sum;
+    out.elapsed_usec = usec;
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
