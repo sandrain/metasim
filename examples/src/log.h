@@ -23,14 +23,17 @@ static inline pid_t __gettid(void)
         do {                                                                 \
             if (mask) {                                                      \
                 char *file = strrchr(__FILE__, '/');                         \
-                fprintf(stderr, "tid=%d @ %s()[%s:%d] ",                     \
+                fprintf(stderr, "# tid=%d @ %s()[%s:%d] ",                     \
                              __gettid(), __func__, &file[1], __LINE__);      \
                 fprintf(stderr, __VA_ARGS__);                                \
                 fprintf(stderr, "\n");                                       \
             }                                                                \
         } while (0)
 
-#define __error(...)  __log(1, __VA_ARGS__)
-#define __debug(...)  __log(1, __VA_ARGS__)
+extern int log_error;
+extern int log_debug;
+
+#define __error(...)  __log(log_error, __VA_ARGS__)
+#define __debug(...)  __log(log_debug, __VA_ARGS__)
 
 #endif

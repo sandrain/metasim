@@ -56,8 +56,11 @@ __print_margo_handler_pool_size(margo_instance_id mid, const char *tag)
     __debug("[%s] handler pool size = %zu/%zu", tag, size, total_size);
 }
 
-#define print_margo_handler_pool_size(mid) \
-        __print_margo_handler_pool_size((mid), __func__)
+#define print_margo_handler_pool_size(mid)                                   \
+        do {                                                                 \
+            if (metasim_log_debug)                                           \
+                __print_margo_handler_pool_size((mid), __func__);            \
+        } while (0)
 
 static inline void
 __print_margo_handler_pool_info(margo_instance_id mid)
@@ -70,8 +73,10 @@ __print_margo_handler_pool_info(margo_instance_id mid)
 
 #define print_margo_handler_pool_info(mid)                                   \
         do {                                                                 \
-            __debug("margo handler pool info:");                             \
-            __print_margo_handler_pool_info((mid));                          \
+            if (metasim_log_debug) {                                         \
+                __debug("margo handler pool info:");                         \
+                __print_margo_handler_pool_info((mid));                      \
+            }                                                                \
         } while (0)
 
 #endif /* __METASIM_SERVER_H */

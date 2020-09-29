@@ -242,19 +242,21 @@ out:
 
 static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
+    { "silent", 0, 0, 's' },
     { "test", 0, 0, 't' },
     { 0, 0, 0, 0 },
 };
 
-static char *s_opts = "ht";
+static char *s_opts = "hst";
 
 static const char *usage_str =
 "\n"
 "Usage: metasimd [options...]\n"
 "\n"
 "Availble options:\n"
-"-h, --help  print this help message\n"
-"-t, --test  perform self test on server start up\n"
+"-h, --help     print this help message\n"
+"-s, --silent   do not print any logs\n"
+"-t, --test     perform self test on server start up\n"
 "\n";
 
 static void print_usage(int ec)
@@ -271,6 +273,7 @@ int main(int argc, char **argv)
     int mpi_rank = 0;
     int mpi_nranks = 0;
     int selftest = 0;
+    int silent = 0;
     char *pos = NULL;
     char logfile[PATH_MAX];
     char loglink[PATH_MAX];
@@ -283,6 +286,10 @@ int main(int argc, char **argv)
 
     while ((ch = getopt_long(argc, argv, s_opts, l_opts, &ix)) >= 0) {
         switch (ch) {
+        case 's':
+            silent = 1;
+            break;
+
         case 't':
             selftest = 1;
             break;
@@ -300,11 +307,15 @@ int main(int argc, char **argv)
     system("mkdir -p logs/addr");
     gethostname(hostname, NAME_MAX);
 
-    sprintf(logfile, "logs/hosts/metasimd.%s", hostname);
-    ret = metasim_log_open(logfile);
-    if (ret) {
-        __error("failed to open the log file (%s). "
-                "messages will be printed in stderr", logfile);
+    if (silent) {
+        metasim_log_disable();
+    } else {
+        sprintf(logfile, "logs/hosts/metasimd.%s", hostname);
+        ret = metasim_log_open(logfile);
+        if (ret) {
+            __error("failed to open the log file (%s). "
+                    "messages will be printed in stderr", logfile);
+        }
     }
 
     /* initialize communication */

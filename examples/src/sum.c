@@ -9,12 +9,16 @@
 #include <string.h>
 #include <assert.h>
 #include <getopt.h>
+#include <time.h>
 #include <mpi.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <metasim.h>
 
 #include "log.h"
+
+int log_error;
+int log_debug;
 
 static int rank;
 static int nranks;
@@ -25,24 +29,158 @@ static int server_nranks;
 
 static metasim_t metasim;
 
+static double get_elapsed_time(struct timespec *t1, struct timespec *t2)
+{
+    double elapsed = .0f;
+
+    elapsed = (1e9*(t2->tv_sec - t1->tv_sec) + (t2->tv_nsec - t1->tv_nsec))/1e9;
+
+    return elapsed;
+}
+
+static double do_sum(int32_t seed, int32_t expected)
+{
+    int ret = 0;
+    int32_t sum = 0;
+    struct timespec start, stop;
+    double elapsed = .0F;
+
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    ret = metasim_invoke_sum(metasim, seed, &sum);
+
+    clock_gettime(CLOCK_REALTIME, &stop);
+    elapsed = get_elapsed_time(&start, &stop);
+
+    __debug("[%d] RPC SUM (seed=%d) => (ret=%d, sum=%d), expected sum=%d (%s),"
+            " %.6f seconds",
+            rank, seed, ret, sum, expected,
+            sum == expected ? "success" : "fail",
+            elapsed);
+
+    return elapsed;
+}
+
+static int32_t calculate_expected_sum(int rank)
+{
+    int32_t seed;
+    int32_t expected;
+
+    seed = rank;
+    expected = (server_nranks * (server_nranks - 1)) / 2;
+    expected += server_nranks * seed;
+
+    return expected;
+}
+
+static int do_sum_serial(int repeat)
+{
+    int i = 0;
+    int32_t expected = 0;
+    double elapsed = .0f;
+    double start = .0f;
+    double stop = .0f;
+
+    if (rank > 0)
+        goto wait;
+
+    expected = calculate_expected_sum(0);
+
+    /* warm up run (the 1st run takes significantly longer than the rest) */
+    elapsed = do_sum(rank, expected);
+
+    start = MPI_Wtime();
+
+    for (i = 0; i < repeat; i++) {
+        elapsed = do_sum(0, expected);
+        printf("%.6lf\n", elapsed);
+    }
+
+    stop = MPI_Wtime();
+
+    if (rank == 0) {
+        double total_runtime = stop - start;
+        double avg = total_runtime / repeat;
+
+        printf("## %d,%.6lf,%.6lf\n", repeat, total_runtime, avg);
+    }
+
+wait:
+    MPI_Barrier(MPI_COMM_WORLD);
+    return 0;
+}
+
+static int do_sum_parallel(int repeat)
+{
+    int i = 0;
+    int32_t expected = 0;
+    double elapsed = .0f;
+    double *all_elapsed = NULL;
+    double start = .0f;
+    double stop = .0f;
+
+    if (rank == 0) {
+        all_elapsed = calloc(nranks, sizeof(*all_elapsed));
+        assert(all_elapsed);
+    }
+
+    expected = calculate_expected_sum(rank);
+
+    /* warm up run (the 1st run takes significantly longer than the rest) */
+    elapsed = do_sum(rank, expected);
+
+    start = MPI_Wtime();
+
+    for (i = 0; i < repeat; i++) {
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        elapsed = do_sum(rank, expected);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        MPI_Gather(&elapsed, 1, MPI_DOUBLE,
+                   all_elapsed, 1, MPI_DOUBLE,
+                   0, MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            for (int r = 0; r < nranks; r++) {
+                printf("%.6lf%c", all_elapsed[r],
+                                  r == nranks - 1 ? '\n' : ',');
+            }
+        }
+    }
+
+    stop = MPI_Wtime();
+
+    if (rank == 0) {
+        double total_runtime = stop - start;
+        double avg = total_runtime / repeat;
+
+        printf("## %d,%.6lf,%.6lf\n", repeat, total_runtime, avg);
+    }
+
+    return 0;
+}
+
 static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
-    { "rank", 1, 0, 'r' },
+    { "repeat", 1, 0, 'r' },
     { "serial", 0, 0, 's' },
+    { "verbose", 0, 0, 'v' },
     { 0, 0, 0, 0 },
 };
 
-static char *s_opts = "hr:s";
+static char *s_opts = "hr:sv";
 
 static char *usage_str =
 "\n"
 "Usage: sum [options...]\n"
 "\n"
 "-h, --help         print this help message\n"
-"-r, --rank=<R>     execute sum operation only on rank <R>\n"
-"                   (default: from all ranks)\n"
-"-s, --serial       execute from target ranks one by one\n"
-"                   (default: running in parallel)\n"
+"-r, --repeat=<N>   repeat <N> times (default=1)\n"
+"-s, --serial       execute sum only from rank 0\n"
+"                   (default: running in parallel from all ranks)\n"
+"-v, --verbose      print debugging messages\n"
 "\n";
 
 static void print_usage(int ec)
@@ -51,26 +189,13 @@ static void print_usage(int ec)
     exit(ec);
 }
 
-static void do_sum(int32_t seed, int32_t expected)
-{
-    int ret = 0;
-    int32_t sum = 0;
-
-    ret = metasim_invoke_sum(metasim, seed, &sum);
-
-    __debug("[%d] RPC SUM (seed=%d) => (ret=%d, sum=%d), expected sum=%d",
-            rank, seed, ret, sum, expected);
-}
-
 int main(int argc, char **argv)
 {
     int ret = 0;
     int serial = 0;
-    int sum_rank = -1;
     int ch = 0;
     int ix = 0;
-    int32_t seed = -1;
-    int32_t expected = 0;
+    int repeat = 1;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
@@ -79,11 +204,16 @@ int main(int argc, char **argv)
     while ((ch = getopt_long(argc, argv, s_opts, l_opts, &ix)) >= 0) {
         switch (ch) {
         case 'r':
-            sum_rank = atoi(optarg);
+            repeat = atoi(optarg);
             break;
 
         case 's':
             serial = 1;
+            break;
+
+        case 'v':
+            log_error = 1;
+            log_debug = 1;
             break;
 
         case 'h':
@@ -93,13 +223,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (sum_rank >= nranks) {
-        __debug("%d is not a valid rank, rank 0 will be used", sum_rank);
-        sum_rank = 0;
-    }
-
-    if (sum_rank >= 0)
-        __debug("sum will be invoked from rank %d", sum_rank);
+    if (serial)
+        __debug("sum will be invoked only from rank 0");
     else
         __debug("sum will be invoked from all %d ranks", nranks);
 
@@ -120,25 +245,10 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    seed = rank;
-    expected = (server_nranks * (server_nranks - 1)) / 2;
-    expected += server_nranks * seed;
-
-    if (sum_rank < 0 && serial) {
-        for (int i = 0; i < nranks; i++) {
-            MPI_Barrier(MPI_COMM_WORLD);
-
-            if (i == rank)
-                do_sum(seed, expected);
-        }
-    } else {
-        MPI_Barrier(MPI_COMM_WORLD);
-
-        if (sum_rank < 0 || sum_rank == rank)
-            do_sum(seed, expected);
-
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
+    if (serial)
+        do_sum_serial(repeat);
+    else
+        do_sum_parallel(repeat);
 
 out:
     metasim_exit(metasim);

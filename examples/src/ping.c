@@ -15,6 +15,9 @@
 
 #include "log.h"
 
+int log_error = 1;
+int log_debug = 1;
+
 static int rank;
 static int nranks;
 static pid_t pid;
