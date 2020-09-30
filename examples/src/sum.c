@@ -64,6 +64,7 @@ static int do_sum_serial(int repeat)
 {
     int i = 0;
     int32_t expected = 0;
+    double server_elapsed = .0f;
     double elapsed = .0f;
     double start = .0f;
     double stop = .0f;
@@ -81,6 +82,8 @@ static int do_sum_serial(int repeat)
     for (i = 0; i < repeat; i++) {
         elapsed = do_sum(0, expected);
         printf("%.6lf\n", elapsed);
+
+        server_elapsed += elapsed;
     }
 
     stop = MPI_Wtime();
@@ -89,7 +92,8 @@ static int do_sum_serial(int repeat)
         double total_runtime = stop - start;
         double avg = total_runtime / repeat;
 
-        printf("## %d,%.6lf,%.6lf\n", repeat, total_runtime, avg);
+        printf("## %d,%.6lf,%.6lf,%.6lf\n",
+               repeat, total_runtime, avg, server_elapsed/repeat);
     }
 
 wait:

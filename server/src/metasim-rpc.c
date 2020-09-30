@@ -37,6 +37,8 @@ MERCURY_GEN_PROC(metasim_sum_out_t,
                  ((int32_t)(sum)));
 DECLARE_MARGO_RPC_HANDLER(metasim_rpc_handle_sum);
 
+static metasim_rpc_tree_t bcast_tree;
+
 /*
  * rpc: ping
  */
@@ -239,6 +241,9 @@ out:
     sum += metasim->rank + seed;
     out->sum = sum;
 
+    if (req)
+        free(req);
+
     return ret;
 }
 
@@ -279,21 +284,23 @@ int metasim_rpc_invoke_sum(int32_t seed, int32_t *sum)
 {
     int ret = 0;
     int32_t _sum = 0;
-    metasim_rpc_tree_t tree;
+    //metasim_rpc_tree_t tree;
     metasim_sum_in_t in;
     metasim_sum_out_t out;
 
+#if 0
     ret = metasim_rpc_tree_init(metasim->rank, metasim->nranks, metasim->rank,
                                 2, &tree);
     if (ret) {
         __error("failed to initialize the rpc tree (ret=%d)", ret);
         return ret;
     }
+#endif
 
     in.root = metasim->rank;
     in.seed = seed;
 
-    ret = sum_forward(&tree, &in, &out);
+    ret = sum_forward(&bcast_tree, &in, &out);
     if (ret) {
         __error("sum_forward failed (ret=%d)", ret);
     } else {
@@ -303,7 +310,7 @@ int metasim_rpc_invoke_sum(int32_t seed, int32_t *sum)
        *sum = _sum;
     }
 
-    metasim_rpc_tree_free(&tree);
+    //metasim_rpc_tree_free(&tree);
 
     return ret;
 }
@@ -324,5 +331,8 @@ void metasim_rpc_register(void)
                        metasim_sum_in_t,
                        metasim_sum_out_t,
                        metasim_rpc_handle_sum);
+
+    metasim_rpc_tree_init(metasim->rank, metasim->nranks, metasim->rank,
+                          2, &bcast_tree);
 }
 

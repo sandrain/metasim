@@ -53,7 +53,7 @@ void metasim_log_close(void);
 
 static inline void metasim_log_disable(void)
 {
-    metasim_log_error = 0;
+    metasim_log_error = 1;
     metasim_log_debug = 0;
 }
 
