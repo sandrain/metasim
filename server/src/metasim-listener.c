@@ -189,6 +189,73 @@ static void metasim_listener_handle_sum(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_sum);
 
+static void metasim_listener_handle_sumrepeat(hg_handle_t handle)
+{
+    int ret = 0;
+    int32_t i = 0;
+    int32_t seed = 0;
+    int32_t repeat = 0;
+    int32_t sum = 0;
+    metasim_sumrepeat_in_t in;
+    metasim_sumrepeat_out_t out;
+    struct timespec start, stop;
+    uint64_t usec = 0;
+
+    print_margo_handler_pool_size(listener_mid);
+
+    margo_get_input(handle, &in);
+    seed = in.seed;
+    repeat = in.repeat;
+
+    __debug("[RPC SUMREPEAT] received & forwarding rpc (seed=%d, repeat=%d)",
+            seed, repeat);
+
+    /* the 1st run took longer than the subsequent runs */
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    ret = metasim_rpc_invoke_sum(seed, &sum);
+
+    clock_gettime(CLOCK_REALTIME, &stop);
+
+    if (ret) {
+        __error("metasim_rpc_invoke_ping failed, will return -1 (ret=%d)",
+                ret);
+        sum = -1;
+    }
+
+    usec = calculate_elapsed_usec(&start, &stop);
+    __debug("[RPC SUMREPEAT] first sum took %llu", (unsigned long long) usec);
+
+    /* now repeat and measure the time */
+    ret = 0;
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    for (i = 0; i < repeat; i++)
+        ret |= metasim_rpc_invoke_sum(seed, &sum);
+
+    clock_gettime(CLOCK_REALTIME, &stop);
+
+    if (ret) {
+        __error("metasim_rpc_invoke_ping failed, will return -1 (ret=%d)",
+                ret);
+        sum = -1;
+    }
+
+    usec = calculate_elapsed_usec(&start, &stop);
+
+    __debug("[RPC SUM] respoding rpc (sum=%d, usec=%llu)",
+            sum, (unsigned long long) usec);
+
+    out.ret = ret;
+    out.sum = sum;
+    out.elapsed_usec = usec;
+
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(metasim_listener_handle_sumrepeat);
+
 static void listener_register_rpc(margo_instance_id mid)
 {
     MARGO_REGISTER(mid, "listener_init",
@@ -215,6 +282,11 @@ static void listener_register_rpc(margo_instance_id mid)
                    metasim_sum_in_t,
                    metasim_sum_out_t,
                    metasim_listener_handle_sum);
+
+    MARGO_REGISTER(mid, "listener_sumrepeat",
+                   metasim_sumrepeat_in_t,
+                   metasim_sumrepeat_out_t,
+                   metasim_listener_handle_sumrepeat);
 }
 
 int metasim_listener_init(void)

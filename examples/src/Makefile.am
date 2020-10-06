@@ -1,4 +1,4 @@
-libexec_PROGRAMS = ping echo sum
+libexec_PROGRAMS = ping echo sum sumrepeat mpisum
 
 AM_CFLAGS = -Wall $(MPI_CFLAGS)
 
@@ -13,4 +13,8 @@ ping_SOURCES = ping.c
 echo_SOURCES = echo.c
 
 sum_SOURCES = sum.c
+
+sumrepeat_SOURCES = sumrepeat.c
+
+mpisum_SOURCES = mpisum.c
 

@@ -1,5 +1,5 @@
 /* Copyright (C) 2020 - UT-Battelle, LLC. All right reserved.
- * 
+ *
  * Please refer to COPYING for the license.
  * ------------------------------------------------------------------------
  * Written by: Hyogi Sim <simh@ornl.gov>
@@ -28,7 +28,7 @@ typedef struct metasim_ctx metasim_ctx_t;
 #define DEBUG 1
 
 #ifdef DEBUG
-#define __debug(...) fprintf(stderr, __VA_ARGS__) 
+#define __debug(...) fprintf(stderr, __VA_ARGS__)
 #else
 #define __debug(...)
 #endif
@@ -54,7 +54,7 @@ int metasim_invoke_init(metasim_t metasim,
 
     if (!self)
         return EINVAL;
-    
+
     rpc_id = self->rpc.init;
     in.rank = rank;
     in.pid = pid;
@@ -84,7 +84,7 @@ int metasim_invoke_terminate(metasim_t metasim, int32_t rank, int32_t pid)
 
     if (!self)
         return EINVAL;
-    
+
     rpc_id = self->rpc.terminate;
     in.rank = rank;
     in.pid = pid;
@@ -142,7 +142,7 @@ int metasim_invoke_ping(metasim_t metasim,
 
     if (!self)
         return EINVAL;
-    
+
     rpc_id = self->rpc.ping;
     in.target = target;
     in.ping = ping;
@@ -171,9 +171,40 @@ int metasim_invoke_sum(metasim_t metasim, int32_t seed, int32_t *sum,
 
     if (!self)
         return EINVAL;
-    
+
     rpc_id = self->rpc.sum;
     in.seed = seed;
+
+    margo_create(self->mid, self->listener_addr, rpc_id, &handle);
+    margo_forward(handle, &in);
+
+    margo_get_output(handle, &out);
+    ret = out.ret;
+    *sum = out.sum;
+    *elapsed_usec = out.elapsed_usec;
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return ret;
+}
+
+int metasim_invoke_sumrepeat(metasim_t metasim, int32_t seed, int32_t repeat,
+                             int32_t *sum, uint64_t *elapsed_usec)
+{
+    int ret = 0;
+    metasim_ctx_t *self = metasim_ctx(metasim);
+    hg_handle_t handle;
+    hg_id_t rpc_id;
+    metasim_sumrepeat_in_t in;
+    metasim_sumrepeat_out_t out;
+
+    if (!self)
+        return EINVAL;
+
+    rpc_id = self->rpc.sumrepeat;
+    in.seed = seed;
+    in.repeat = repeat;
 
     margo_create(self->mid, self->listener_addr, rpc_id, &handle);
     margo_forward(handle, &in);
@@ -277,6 +308,11 @@ static void register_rpc(metasim_ctx_t *self)
         MARGO_REGISTER(mid, "listener_sum",
                        metasim_sum_in_t,
                        metasim_sum_out_t,
+                       NULL);
+    rpc->sumrepeat =
+        MARGO_REGISTER(mid, "listener_sumrepeat",
+                       metasim_sumrepeat_in_t,
+                       metasim_sumrepeat_out_t,
                        NULL);
 }
 

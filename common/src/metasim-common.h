@@ -13,6 +13,7 @@ struct metasim_rpcset {
     hg_id_t echo;
     hg_id_t ping;
     hg_id_t sum;
+    hg_id_t sumrepeat;
 };
 
 typedef struct metasim_rpcset metasim_rpcset_t;
@@ -46,6 +47,14 @@ MERCURY_GEN_PROC(metasim_ping_out_t,
 MERCURY_GEN_PROC(metasim_sum_in_t,
                  ((int32_t)(seed)));
 MERCURY_GEN_PROC(metasim_sum_out_t,
+                 ((int32_t)(ret))
+                 ((int32_t)(sum))
+                 ((uint64_t)(elapsed_usec)));
+
+MERCURY_GEN_PROC(metasim_sumrepeat_in_t,
+                 ((int32_t)(seed))
+                 ((int32_t)(repeat)));
+MERCURY_GEN_PROC(metasim_sumrepeat_out_t,
                  ((int32_t)(ret))
                  ((int32_t)(sum))
                  ((uint64_t)(elapsed_usec)));
