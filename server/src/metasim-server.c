@@ -22,6 +22,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+/*
+ * We currently use mpi for bootstrapping only. MPI seems to be the most
+ * reliable way to do this over using file system or pmix, etc.
+ */
 #include <mpi.h>
 #include <margo.h>
 
@@ -34,8 +38,13 @@ metasim_server_t *metasim = &_metasim;
 
 static int metasim_proto;
 static char *metasim_proto_prefix[] = {
-    "ofi+tcp://", "ofi+verbs", 0
+    "ofi+tcp://", "ofi+verbs://", 0
 };
+
+static inline void metasim_fence(void)
+{
+    MPI_Barrier(MPI_COMM_WORLD);
+}
 
 static void __fence(const char *format, ...)
 {
@@ -49,58 +58,33 @@ static void __fence(const char *format, ...)
 }
 
 static char hostname[NAME_MAX];
-static const char *server_addr_dir = "logs/addr";
 
-static int write_addr_file(int rank, const char *str)
+#define ADDRSTRLEN 256
+
+static char addrstr[ADDRSTRLEN];
+static char *metasimd_addrs;
+
+static int write_addr_file(int nranks)
 {
     int ret = 0;
+    int i = 0;
     char path[PATH_MAX];
     FILE *fp = NULL;
 
-    sprintf(path, "%s/%d", server_addr_dir, rank);
+    sprintf(path, "logs/metasimd.address.txt");
 
     fp = fopen(path, "w");
     if (fp) {
-        fprintf(fp, "%s\n", str);
+        fprintf(fp, "%d\n", nranks);
+
+        for (i = 0; i < nranks; i++)
+            fprintf(fp, "%d,%s\n", i, &metasimd_addrs[i*ADDRSTRLEN]);
+
         fclose(fp);
     } else {
         __error("failed to write address file %s (%s)",
                 path, strerror(errno));
         return errno;
-    }
-
-    return ret;
-}
-
-static int read_addr_file(margo_instance_id mid, int nranks, hg_addr_t *addrs)
-{
-    int ret = 0;
-    int i = 0;
-    FILE *fp = NULL;
-    char path[PATH_MAX];
-    char addrstr[512];
-    hg_addr_t addr;
-    hg_return_t hret;
-
-    for (i = 0; i < nranks; i++) {
-        sprintf(path, "%s/%d", server_addr_dir, i);
-        fp = fopen(path, "r");
-        if (fp) {
-            fgets(addrstr, 511, fp);
-            addrstr[strlen(addrstr) - 1] = '\0';
-
-            __debug("reading address of rank[%d] = %s", i, addrstr);
-
-            hret = margo_addr_lookup(mid, addrstr, &addr);
-            assert(hret == HG_SUCCESS);
-            fclose(fp);
-
-            addrs[i] = addr;
-        } else {
-            __error("failed to read address file %s (err=%s)",
-                    path, strerror(errno));
-            return errno;
-        }
     }
 
     return ret;
@@ -112,10 +96,8 @@ static int comm_init(int mpi_rank, int mpi_nranks)
     int rank = 0;
     int nranks = 0;
     margo_instance_id mid;
-    char addrstr[512];
-    size_t addrstr_len = 512;
     hg_addr_t addr_self;
-    hg_addr_t *peer_addrs;
+    size_t addrlen = ADDRSTRLEN;
     const char *protostr = metasim_proto_prefix[metasim_proto];
 
     __debug("initializa the communication (protocol: %s)", protostr);
@@ -131,40 +113,32 @@ static int comm_init(int mpi_rank, int mpi_nranks)
     }
 
     margo_addr_self(mid, &addr_self);
-    margo_addr_to_string(mid, addrstr, &addrstr_len, addr_self);
+    margo_addr_to_string(mid, addrstr, &addrlen, addr_self);
 
-    __debug("margo initialized: %s", addrstr);
+    __debug("margo address = %s", addrstr);
 
-    ret = write_addr_file(rank, addrstr);
-    assert(0 == ret);
+    __fence("margo initialized..");
+    if (rank == 0) {
+        metasimd_addrs = calloc(nranks, ADDRSTRLEN);
+        assert(metasimd_addrs);
+    }
 
-    peer_addrs = calloc(nranks, sizeof(*peer_addrs));
-    assert(peer_addrs);
-
-    __fence("reading peer addresses");
-
-    ret = read_addr_file(mid, nranks, peer_addrs);
-    assert(0 == ret);
+    ret = MPI_Gather(addrstr, ADDRSTRLEN, MPI_CHAR,
+                     metasimd_addrs, ADDRSTRLEN, MPI_CHAR,
+                     0, MPI_COMM_WORLD);
+    assert(ret == MPI_SUCCESS);
 
     /* initialize the global context */
     metasim->rank = rank;
     metasim->nranks = nranks;
     metasim->mid = mid;
-    metasim->peer_addrs = peer_addrs;
 
-    return 0;
+    return ret;
 }
 
 static void cleanup(void)
 {
-    int i = 0;
-
     if (metasim) {
-        for (i = 0; i < metasim->nranks; i++) {
-            if (metasim->peer_addrs[i] != HG_ADDR_NULL)
-                margo_addr_free(metasim->mid, metasim->peer_addrs[i]);
-        }
-
         if (metasim->mid)
             margo_finalize(metasim->mid);
     }
@@ -172,85 +146,10 @@ static void cleanup(void)
     metasim_log_close();
 }
 
-static int comm_probe_peers(void)
-{
-    int ret = 0;
-    int i = 0;
-    char str[512];
-    size_t len = 512; 
-
-    __debug("probing peer addresses");
-
-    for (i = 0; i < metasim->nranks; i++) {
-        hg_addr_t addr = metasim_get_rank_addr(metasim, i);
-        hg_return_t hret = margo_addr_to_string(metasim->mid, str, &len, addr);
-        if (hret != HG_SUCCESS)
-            __error("failed to examine the address of rank %d", i);
-
-        __debug("rank[%d]: %s %s", i, str,
-                i == metasim->rank ? "(myself)" : "");
-    }
-
-    return ret;
-}
-
-static int test_ping(int rank)
-{
-    int ret = 0;
-    int32_t i = 0;
-    int32_t pong = 0;
-
-    if (rank >= 0 && rank != metasim->rank)
-        return 0;
-
-    __debug("rank %d, performing ping test to %d peers",
-            metasim->rank, metasim->nranks);
-
-    for (i = 0; i < metasim->nranks; i++) {
-        if (i == metasim->rank)
-            continue;
-
-        ret = metasim_rpc_invoke_ping(i, metasim->rank, &pong);
-        if (ret)
-            __error("rpc ping failed");
-
-        __debug("[RPC PING] (target=%d, ping=%d): pong=%d",
-                i, metasim->rank, pong);
-    }
-
-    return ret;
-}
-
-static int test_sum(int rank)
-{
-    int ret = 0;
-    int32_t sum = 0;
-    int32_t expected = 0;
-
-    if (rank >= 0 && rank != metasim->rank)
-        return 0;
-
-    __debug("rank %d, performing sum test", metasim->rank);
-
-    ret = metasim_rpc_invoke_sum(0, &sum);
-    if (ret) {
-        __error("rpc sum failed");
-        goto out;
-    }
-
-    expected = (metasim->nranks - 1) * metasim->nranks / 2;
-
-    __debug("[RPC SUM] sum=%d (expected=%d)", sum, expected);
-
-out:
-    return ret;
-}
-
 static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
     { "verbs", 0, 0, 'i' },
     { "silent", 0, 0, 's' },
-    { "test", 0, 0, 't' },
     { 0, 0, 0, 0 },
 };
 
@@ -264,7 +163,6 @@ static const char *usage_str =
 "-h, --help        print this help message\n"
 "-i, --verbs       use ibverbs transport (default: tcp)\n"
 "-s, --silent      do not print any logs\n"
-"-t, --test        perform self test on server start up\n"
 "\n";
 
 static void print_usage(int ec)
@@ -280,7 +178,6 @@ int main(int argc, char **argv)
     int ix = 0;
     int mpi_rank = 0;
     int mpi_nranks = 0;
-    int selftest = 0;
     int silent = 0;
     char *pos = NULL;
     char logfile[PATH_MAX];
@@ -302,10 +199,6 @@ int main(int argc, char **argv)
             silent = 1;
             break;
 
-        case 't':
-            selftest = 1;
-            break;
-
         case 'h':
         default:
             print_usage(0);
@@ -316,7 +209,6 @@ int main(int argc, char **argv)
     /* open the log file */
     system("mkdir -p logs/margo");
     system("mkdir -p logs/hosts");
-    system("mkdir -p logs/addr");
     gethostname(hostname, NAME_MAX);
 
     if (silent) {
@@ -338,50 +230,20 @@ int main(int argc, char **argv)
     }
 
     /* create a symlink log file with rank */
-    pos = strchr(logfile, '/');
-    sprintf(loglink, "logs/metasimd.%d", metasim->rank);
-    symlink(&pos[1], loglink);
-
-    __fence("created log symlinks using ssg rank");
-
-    /* check if we can resolve all peer addresses */
-    if (metasim->rank == 0) {
-        ret = comm_probe_peers();
-        if (ret) {
-            __error("failed to probe peers");
-            goto out;
-        }
+    if (!silent) {
+        pos = strchr(logfile, '/');
+        sprintf(loglink, "logs/metasimd.%d", metasim->rank);
+        symlink(&pos[1], loglink);
     }
 
     /* register rpcs */
     metasim_rpc_register();
-    //margo_diag_start(metasim->mid);
 
     /* wait until all are initialized */
-    __fence("all peers are initialized");
+    __fence("all servers are initialized");
+    if (mpi_rank == 0)
+        write_addr_file(mpi_nranks);
 
-    if (selftest) {
-        __debug("## test[0]: ping from 0");
-        test_ping(0);
-        __fence("## ping test completed from rank 0");
-
-        __debug("## test[1]: ping from all ranks");
-        test_ping(-1);
-        __fence("## ping test completed from all ranks");
-
-        __debug("## test[2]: broadcast sum from rank 0");
-        test_sum(0);
-        __fence("## broadcast sum test completed from rank 0");
-
-        __debug("## test[3]: broadcast sum from all ranks");
-        test_sum(-1);
-        __fence("## broadcast sum test completed from all ranks");
-    }
-
-    /* init listener to accept requests from local clients */
-    metasim_listener_init();
-
-    //margo_diag_dump(metasim->mid, "logs/margo/diag", 1);
     margo_wait_for_finalize(metasim->mid);
 out:
     cleanup();

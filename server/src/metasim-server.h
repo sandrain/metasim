@@ -2,7 +2,6 @@
 #define __METASIM_SERVER_H
 
 #include <margo.h>
-#include <mpi.h>
 #include <abt.h>
 
 #include "metasim-log.h"
@@ -21,11 +20,6 @@ typedef struct metasim_server metasim_server_t;
 static inline hg_addr_t metasim_get_rank_addr(metasim_server_t *m, int rank)
 {
     return m->peer_addrs[rank];
-}
-
-static inline void metasim_fence(void)
-{
-    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 static inline void
