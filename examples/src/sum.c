@@ -126,6 +126,8 @@ static int do_sum_limited(int repeat, int limited)
             rounds++;
     }
 
+    __debug("hash run: %d rounds\n", rounds);
+
     expected = calculate_expected_sum(rank);
 
     /* warm up run (the 1st run takes significantly longer than the rest) */
@@ -136,11 +138,14 @@ static int do_sum_limited(int repeat, int limited)
 
     for (i = 0; i < repeat; i++) {
 
+
         for (j = 0; j < rounds; j++) {
             MPI_Barrier(MPI_COMM_WORLD);
 
-            if (rank % rounds == j)
+            if (rank % rounds == j) {
+                printf("## rank %d running at round %d", rank, j);
                 do_sum(rank, expected);
+            }
 
             MPI_Barrier(MPI_COMM_WORLD);
         }
@@ -148,13 +153,6 @@ static int do_sum_limited(int repeat, int limited)
         MPI_Gather(&elapsed, 1, MPI_DOUBLE,
                    all_elapsed, 1, MPI_DOUBLE,
                    0, MPI_COMM_WORLD);
-
-        if (rank == 0) {
-            for (int r = 0; r < nranks; r++) {
-                printf("%.6lf%c", all_elapsed[r],
-                                  r == nranks - 1 ? '\n' : ',');
-            }
-        }
     }
 
     stop = MPI_Wtime();
@@ -163,7 +161,8 @@ static int do_sum_limited(int repeat, int limited)
         double total_runtime = stop - start;
         double avg = total_runtime / repeat;
 
-        printf("## %d,%.6lf,%.6lf\n", repeat, total_runtime, avg);
+        printf("## %d,%.6lf,%.6lf (%d rounds)\n",
+                repeat, total_runtime, avg, rounds);
     }
 
     return 0;
