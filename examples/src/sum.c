@@ -101,6 +101,71 @@ wait:
     return 0;
 }
 
+static int do_sum_limited(int repeat, int limited)
+{
+    int i = 0;
+    int j = 0;
+    int rounds = nranks;
+    int32_t expected = 0;
+    double elapsed = .0f;
+    double *all_elapsed = NULL;
+    double start = .0f;
+    double stop = .0f;
+
+    if (rank == 0) {
+        all_elapsed = calloc(nranks, sizeof(*all_elapsed));
+        assert(all_elapsed);
+    }
+
+    if (limited < nranks) {
+        rounds = nranks / limited;
+        if (nranks % limited)
+            rounds++;
+    }
+
+    expected = calculate_expected_sum(rank);
+
+    /* warm up run (the 1st run takes significantly longer than the rest) */
+    elapsed = do_sum(rank, expected);
+
+    start = MPI_Wtime();
+
+    for (i = 0; i < repeat; i++) {
+
+        for (j = 0; j < rounds; j++) {
+            MPI_Barrier(MPI_COMM_WORLD);
+
+            if (rank % rounds == j)
+                do_sum(rank, expected);
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+        MPI_Gather(&elapsed, 1, MPI_DOUBLE,
+                   all_elapsed, 1, MPI_DOUBLE,
+                   0, MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            for (int r = 0; r < nranks; r++) {
+                printf("%.6lf%c", all_elapsed[r],
+                                  r == nranks - 1 ? '\n' : ',');
+            }
+        }
+    }
+
+    stop = MPI_Wtime();
+
+    if (rank == 0) {
+        double total_runtime = stop - start;
+        double avg = total_runtime / repeat;
+
+        printf("## %d,%.6lf,%.6lf\n", repeat, total_runtime, avg);
+    }
+
+    return 0;
+}
+
+
 static int do_sum_parallel(int repeat)
 {
     int i = 0;
@@ -157,11 +222,12 @@ static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
     { "repeat", 1, 0, 'r' },
     { "serial", 0, 0, 's' },
+    { "limited", 1, 0, 'l' },
     { "verbose", 0, 0, 'v' },
     { 0, 0, 0, 0 },
 };
 
-static char *s_opts = "hr:sv";
+static char *s_opts = "hl:r:sv";
 
 static char *usage_str =
 "\n"
@@ -171,6 +237,7 @@ static char *usage_str =
 "-r, --repeat=<N>   repeat <N> times (default=1)\n"
 "-s, --serial       execute sum only from rank 0\n"
 "                   (default: running in parallel from all ranks)\n"
+"-l, --limited=<N>  at most <N> sum operations are executed in parallel\n"
 "-v, --verbose      print debugging messages\n"
 "\n";
 
@@ -187,6 +254,7 @@ int main(int argc, char **argv)
     int ch = 0;
     int ix = 0;
     int repeat = 1;
+    int limited = 1;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
@@ -196,6 +264,10 @@ int main(int argc, char **argv)
         switch (ch) {
         case 'r':
             repeat = atoi(optarg);
+            break;
+
+        case 'l':
+            limited = atoi(optarg);
             break;
 
         case 's':
@@ -216,6 +288,9 @@ int main(int argc, char **argv)
 
     if (serial)
         __debug("sum will be invoked only from rank 0");
+    else if (limited)
+        __debug("sum will be invoked from all %d ranks "
+                "(%d inflight operations at a time)", nranks, limited);
     else
         __debug("sum will be invoked from all %d ranks", nranks);
 
@@ -238,6 +313,8 @@ int main(int argc, char **argv)
 
     if (serial)
         do_sum_serial(repeat);
+    else if (limited)
+        do_sum_limited(repeat, limited);
     else
         do_sum_parallel(repeat);
 
