@@ -26,6 +26,8 @@ static pid_t pid;
 static int server_rank;
 static int server_nranks;
 
+static int warmup;
+
 static metasim_t metasim;
 
 static double do_sum(int32_t seed, int32_t expected)
@@ -75,7 +77,8 @@ static int do_sum_serial(int repeat)
     expected = calculate_expected_sum(0);
 
     /* warm up run (the 1st run takes significantly longer than the rest) */
-    elapsed = do_sum(rank, expected);
+    if (warmup)
+        elapsed = do_sum(rank, expected);
 
     start = MPI_Wtime();
 
@@ -126,7 +129,8 @@ static int do_sum_limited(int repeat, int limited)
     expected = calculate_expected_sum(rank);
 
     /* warm up run (the 1st run takes significantly longer than the rest) */
-    elapsed = do_sum(rank, expected);
+    if (warmup)
+        elapsed = do_sum(rank, expected);
 
     start = MPI_Wtime();
 
@@ -183,7 +187,8 @@ static int do_sum_parallel(int repeat)
     expected = calculate_expected_sum(rank);
 
     /* warm up run (the 1st run takes significantly longer than the rest) */
-    elapsed = do_sum(rank, expected);
+    if (warmup)
+        elapsed = do_sum(rank, expected);
 
     start = MPI_Wtime();
 
@@ -220,25 +225,27 @@ static int do_sum_parallel(int repeat)
 
 static struct option l_opts[] = {
     { "help", 0, 0, 'h' },
+    { "limited", 1, 0, 'l' },
     { "repeat", 1, 0, 'r' },
     { "serial", 0, 0, 's' },
-    { "limited", 1, 0, 'l' },
     { "verbose", 0, 0, 'v' },
+    { "warmup", 0, 0, 'w' },
     { 0, 0, 0, 0 },
 };
 
-static char *s_opts = "hl:r:sv";
+static char *s_opts = "hl:r:svw";
 
 static char *usage_str =
 "\n"
 "Usage: sum [options...]\n"
 "\n"
 "-h, --help         print this help message\n"
+"-l, --limited=<N>  at most <N> sum operations are executed in parallel\n"
 "-r, --repeat=<N>   repeat <N> times (default=1)\n"
 "-s, --serial       execute sum only from rank 0\n"
 "                   (default: running in parallel from all ranks)\n"
-"-l, --limited=<N>  at most <N> sum operations are executed in parallel\n"
 "-v, --verbose      print debugging messages\n"
+"-w, --warmup       perform an extra warmup operation before measuring\n"
 "\n";
 
 static void print_usage(int ec)
@@ -277,6 +284,10 @@ int main(int argc, char **argv)
         case 'v':
             log_error = 1;
             log_debug = 1;
+            break;
+
+        case 'w':
+            warmup = 1;
             break;
 
         case 'h':
