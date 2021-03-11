@@ -1,4 +1,4 @@
-/* Copyright (C) 2020 - UT-Battelle, LLC. All right reserved.
+/* Copyright (C) 2020, 2021 - UT-Battelle, LLC. All right reserved.
  * 
  * Please refer to COPYING for the license.
  * ------------------------------------------------------------------------
@@ -108,7 +108,7 @@ static int do_sum_limited(int repeat, int limited)
 {
     int i = 0;
     int j = 0;
-    int rounds = nranks;
+    int rounds = 1;
     int32_t expected = 0;
     double elapsed = .0f;
     double *all_elapsed = NULL;
